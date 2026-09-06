@@ -202,7 +202,7 @@ footer{margin-top:34px;border-top:1px solid var(--line);padding-top:18px;color:v
   <footer>
     <p>КТП 4 класу — за наданим документом (типова освітня програма під керівництвом Р. Б. Шияна, автори Г. В. Ломаковська, Г. О. Проценко). КТП 3 класу складено на основі тієї ж програми й узгоджено з логікою 4 класу.</p>
     <p>Позначки «проведено», фактичні дати й нотатки зберігаються у цьому браузері. Щоб перенести їх на інший пристрій — «Експортувати журнал», а на новому «Імпортувати».</p>
-    <p>Дати розраховано на понеділки від 07.09.2026 з орієнтовними канікулами. 08.03.2027 і 03.05.2027 припадають на святкові дні — звір із наказом школи й постав фактичну дату в журналі.</p>
+    <p>Дати — понеділки від 07.09.2026 до 24.05.2027 за структурою навчального року школи: 01.09.2026 — 04.06.2027, канікули осінні 26–30.10.2026, зимові 24.12.2026 — 08.01.2027, весняні 22–26.03.2027, великодні 30.04 — 03.05.2027. І семестр закінчується уроком 15 (21.12.2026), ІІ починається уроком 16 (11.01.2027). 08.03.2027 виключено як святковий день; 31.05.2027 лишається запасним понеділком на перенесення.</p>
   </footer>
 </div>
 
@@ -345,14 +345,14 @@ function viewKtp(g){
     '<h2>'+c.label+' · '+(g==="g4"?"за наданим КТП":"КТП складено на основі програми")+'</h2></div>');
   parts.push('<div class="segbar">'+
     '<button type="button" class="seg" data-seg="all" aria-pressed="'+(segFilter==="all")+'">Усі 32</button>'+
-    '<button type="button" class="seg" data-seg="s1" aria-pressed="'+(segFilter==="s1")+'">І семестр · 1–16</button>'+
-    '<button type="button" class="seg" data-seg="s2" aria-pressed="'+(segFilter==="s2")+'">ІІ семестр · 17–32</button>'+
+    '<button type="button" class="seg" data-seg="s1" aria-pressed="'+(segFilter==="s1")+'">І семестр · 1–'+(DATA.s2-1)+'</button>'+
+    '<button type="button" class="seg" data-seg="s2" aria-pressed="'+(segFilter==="s2")+'">ІІ семестр · '+DATA.s2+'–32</button>'+
     '<button type="button" class="seg" data-seg="todo" aria-pressed="'+(segFilter==="todo")+'">Ще не проведено</button></div>');
   parts.push('<div class="rows">');
   for(let i=1;i<=32;i++){
     const e=entry(g,i), t=ktp[i-1], has=!!plans[String(i)];
-    if(segFilter==="s1" && i>16) continue;
-    if(segFilter==="s2" && i<17) continue;
+    if(segFilter==="s1" && i>=DATA.s2) continue;
+    if(segFilter==="s2" && i<DATA.s2) continue;
     if(segFilter==="todo" && e.done) continue;
     parts.push('<button type="button" class="row'+(e.done?" done":"")+(has?" has":"")+'" data-go="/'+g+'/'+i+'">'+
       '<span class="n">'+i+'</span>'+

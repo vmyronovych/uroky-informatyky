@@ -6,6 +6,7 @@
 Один самодостатній HTML-файл на виході — саме його роздає GitHub Pages.
 """
 import json, re, pathlib
+from datetime import date, timedelta
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SRC = ROOT / "src"
@@ -23,6 +24,29 @@ HEAD = """<!doctype html>
 <link rel="icon" href="%s">
 <style>html,body{margin:0}img{max-width:100%%}[hidden]{display:none!important}</style>
 """ % FAVICON
+
+
+def lesson_dates(cal):
+    """Усі навчальні дні року, що припадають на день тижня уроку.
+
+    Канікули й святкові дні з src/calendar.json відкидаються. Повертає більше
+    днів, ніж уроків, — залишок це запас на перенесення.
+    """
+    def d(x):
+        return date.fromisoformat(x)
+
+    off = []
+    for v in cal["vacations"]:
+        off.append((d(v["from"]), d(v["to"])))
+    for h in cal["holidays"]:
+        off.append((d(h["date"]), d(h["date"])))
+
+    days, x, end = [], d(cal["start"]), d(cal["end"])
+    while x <= end:
+        if x.isoweekday() == cal["weekday"] and not any(a <= x <= b for a, b in off):
+            days.append(x.isoformat())
+        x += timedelta(days=1)
+    return days
 
 
 def load(name):
@@ -43,7 +67,15 @@ def dedupe_line(s):
 def main():
     ktp3, ktp4 = load("ktp3.json"), load("ktp4.json")
     p3, p4 = load("plans3.json"), load("plans4.json")
-    dates = load("dates.json")
+    cal = load("calendar.json")
+
+    days = lesson_dates(cal)
+    n_lessons = cal["lessons"]
+    if len(days) < n_lessons:
+        raise SystemExit("src/calendar.json: навчальних днів %d, а уроків %d — "
+                         "перевір канікули й свята" % (len(days), n_lessons))
+    dates = days[:n_lessons]
+    s2 = next(i for i, x in enumerate(dates, 1) if x >= cal["semester2from"])
 
     k3 = [{"n": d["n"], "topic": d["topic"], "res": d["res"], "line": d["line"]} for d in ktp3]
     k4 = [{"n": d["n"],
@@ -51,7 +83,7 @@ def main():
            "res": d["res"].strip().rstrip(".;"),
            "line": dedupe_line(d["line"])} for d in ktp4]
 
-    data = {"dates": dates,
+    data = {"dates": dates, "s2": s2,
             "g3": {"ktp": k3, "plans": {str(p["n"]): p for p in p3}},
             "g4": {"ktp": k4, "plans": {str(p["n"]): p for p in p4}}}
 
@@ -68,6 +100,9 @@ def main():
     out.write_text(doc, encoding="utf-8")
     print("index.html — %d КБ, уроків: 3 клас %d/%d конспектів, 4 клас %d/%d"
           % (len(doc.encode("utf-8")) // 1024, len(p3), len(k3), len(p4), len(k4)))
+    print("І семестр %d (по %s), ІІ семестр %d (з %s), у запасі днів: %d"
+          % (s2 - 1, dates[s2 - 2], n_lessons - s2 + 1, dates[s2 - 1],
+             len(days) - n_lessons))
 
 
 if __name__ == "__main__":
