@@ -186,7 +186,8 @@ input[type="date"]{font-family:"JetBrains Mono",monospace;font-size:14px}
 .stub p{font-size:15px;color:var(--ink-2)}
 
 .tools{display:flex;gap:10px;flex-wrap:wrap}
-.hint{margin-top:10px;font-size:12.5px;line-height:1.55;color:var(--ink-3);max-width:66ch}
+.nitbar{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin:14px 0 2px}
+.hint{font-size:12.5px;line-height:1.55;color:var(--ink-3);max-width:64ch}
 .navrow{display:flex;gap:10px;justify-content:space-between;padding-top:6px}
 .nav{font-family:"Onest",sans-serif;font-size:13.5px;font-weight:600;color:var(--ink-2);border:1px solid var(--line);background:var(--surface);border-radius:6px;padding:9px 13px}
 .nav:hover{color:var(--ink);border-color:var(--line-strong)}
@@ -441,11 +442,7 @@ function viewHome(){
   parts.push('</div>');
   parts.push('<div class="tools"><button type="button" class="nav" id="expBtn">Експортувати журнал</button>'+
     '<button type="button" class="nav" id="impBtn">Імпортувати журнал</button>'+
-    '<input type="file" id="impFile" accept="application/json,.json" hidden>'+
-    '<button type="button" class="nav" data-nit="g3">Файл для НІТ · 3 клас</button>'+
-    '<button type="button" class="nav" data-nit="g4">Файл для НІТ · 4 клас</button></div>');
-  parts.push('<p class="hint">Файл для НІТ — теми уроків з КТП одним стовпцем «Зміст робіт», у порядку 1–32. '+
-    'У НІТ: план навчання → імпорт із файлу. Дати НІТ проставляє сам за розкладом.</p>');
+    '<input type="file" id="impFile" accept="application/json,.json" hidden></div>');
   parts.push('</div>');
   return parts.join("");
 }
@@ -461,6 +458,9 @@ function viewKtp(g){
     '<button type="button" class="seg" data-seg="s1" aria-pressed="'+(segFilter==="s1")+'">І семестр · 1–'+(DATA.s2-1)+'</button>'+
     '<button type="button" class="seg" data-seg="s2" aria-pressed="'+(segFilter==="s2")+'">ІІ семестр · '+DATA.s2+'–32</button>'+
     '<button type="button" class="seg" data-seg="todo" aria-pressed="'+(segFilter==="todo")+'">Ще не проведено</button></div>');
+  parts.push('<div class="nitbar"><button type="button" class="nav" data-nit="'+g+'">Завантажити файл для НІТ</button>'+
+    '<span class="hint">Теми 1–32 одним стовпцем «Зміст робіт». У НІТ: план навчання → імпорт із файлу; '+
+    'дати НІТ проставляє сам за розкладом.</span></div>');
   parts.push('<div class="rows">');
   for(let i=1;i<=32;i++){
     const e=entry(g,i), t=ktp[i-1], has=!!plans[String(i)];
