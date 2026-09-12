@@ -369,15 +369,16 @@ function xlsxOneColumn(sheetName, header, rows){
 }
 
 function downloadNit(g){
-  const c=CLASSES[g];
-  const bytes=xlsxOneColumn(NIT_SHEET, NIT_HEADER, DATA[g].ktp.map(t=>t.topic));
+  const c=CLASSES[g], seg=SEG[segFilter]||SEG.all, nums=ktpNums(g);
+  if(!nums.length) return;
+  const bytes=xlsxOneColumn(NIT_SHEET, NIT_HEADER, nums.map(i=>DATA[g].ktp[i-1].topic));
   const blob=new Blob([bytes], {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
   const url=URL.createObjectURL(blob);
   const a=document.createElement("a");
-  a.href=url; a.download="Інформатика-"+c.short+"-клас.xlsx";
+  a.href=url; a.download="Інформатика-"+c.short+"-клас"+seg.suffix+".xlsx";
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(()=>URL.revokeObjectURL(url), 2000);
-  setSync("on", "файл для НІТ: "+c.label+", тем "+DATA[g].ktp.length);
+  setSync("on", "файл для НІТ: "+c.label+", "+seg.label+", "+nums.length+" "+plural(nums.length,"тема","теми","тем"));
 }
 
 /* ---------------- routing ---------------- */
@@ -448,6 +449,33 @@ function viewHome(){
 }
 
 let segFilter="all";
+
+/* Уроки, які зараз показує фільтр. Той самий перелік іде і у файл для НІТ,
+   щоб список на екрані й вміст файлу не могли розійтися. */
+const SEG = {
+  all:{label:"усі уроки", suffix:""},
+  s1:{label:"І семестр", suffix:"-І-семестр"},
+  s2:{label:"ІІ семестр", suffix:"-ІІ-семестр"},
+  todo:{label:"ще не проведено", suffix:"-не-проведено"}
+};
+function ktpNums(g){
+  const out=[];
+  for(let i=1;i<=32;i++){
+    if(segFilter==="s1" && i>=DATA.s2) continue;
+    if(segFilter==="s2" && i<DATA.s2) continue;
+    if(segFilter==="todo" && entry(g,i).done) continue;
+    out.push(i);
+  }
+  return out;
+}
+function plural(n, one, few, many){
+  const a=n%100, b=n%10;
+  if(a>=11 && a<=14) return many;
+  if(b===1) return one;
+  if(b>=2 && b<=4) return few;
+  return many;
+}
+
 function viewKtp(g){
   const c=CLASSES[g], ktp=DATA[g].ktp, plans=DATA[g].plans;
   const parts=['<div class="'+c.cls+'">'];
@@ -458,15 +486,14 @@ function viewKtp(g){
     '<button type="button" class="seg" data-seg="s1" aria-pressed="'+(segFilter==="s1")+'">І семестр · 1–'+(DATA.s2-1)+'</button>'+
     '<button type="button" class="seg" data-seg="s2" aria-pressed="'+(segFilter==="s2")+'">ІІ семестр · '+DATA.s2+'–32</button>'+
     '<button type="button" class="seg" data-seg="todo" aria-pressed="'+(segFilter==="todo")+'">Ще не проведено</button></div>');
-  parts.push('<div class="nitbar"><button type="button" class="nav" data-nit="'+g+'">Завантажити файл для НІТ</button>'+
-    '<span class="hint">Теми 1–32 одним стовпцем «Зміст робіт». У НІТ: план навчання → імпорт із файлу; '+
-    'дати НІТ проставляє сам за розкладом.</span></div>');
+  const nums=ktpNums(g), cnt=nums.length;
+  parts.push('<div class="nitbar"><button type="button" class="nav" data-nit="'+g+'"'+(cnt?"":" disabled")+'>'+
+    'Завантажити файл для НІТ · '+cnt+' '+plural(cnt,"тема","теми","тем")+'</button>'+
+    '<span class="hint">Одним стовпцем «Зміст робіт», у порядку уроків — рівно те, що зараз у фільтрі. '+
+    'У НІТ: план навчання → імпорт із файлу; дати НІТ проставляє сам за розкладом.</span></div>');
   parts.push('<div class="rows">');
-  for(let i=1;i<=32;i++){
+  for(const i of nums){
     const e=entry(g,i), t=ktp[i-1], has=!!plans[String(i)];
-    if(segFilter==="s1" && i>=DATA.s2) continue;
-    if(segFilter==="s2" && i<DATA.s2) continue;
-    if(segFilter==="todo" && e.done) continue;
     parts.push('<button type="button" class="row'+(e.done?" done":"")+(has?" has":"")+'" data-go="/'+g+'/'+i+'">'+
       '<span class="n">'+i+'</span>'+
       '<span class="dt">'+fmtShort(e.date||DATA.dates[i-1])+'</span>'+
