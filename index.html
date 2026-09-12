@@ -195,6 +195,8 @@ input[type="date"]{font-family:"JetBrains Mono",monospace;font-size:14px}
 .stub p{font-size:15px;color:var(--ink-2)}
 
 .tools{display:flex;gap:10px;flex-wrap:wrap}
+.nitbar{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin:14px 0 2px}
+.hint{font-size:12.5px;line-height:1.55;color:var(--ink-3);max-width:64ch}
 .navrow{display:flex;gap:10px;justify-content:space-between;padding-top:6px}
 .nav{font-family:"Onest",sans-serif;font-size:13.5px;font-weight:600;color:var(--ink-2);border:1px solid var(--line);background:var(--surface);border-radius:6px;padding:9px 13px}
 .nav:hover{color:var(--ink);border-color:var(--line-strong)}
@@ -281,6 +283,115 @@ function importLog(file){
   r.readAsText(file);
 }
 
+/* ---- файл планування для НІТ ----
+   Формат узято зі шаблону НІТ: одна книга, аркуш «План навчання», єдиний
+   стовпець A. A1 — заголовок «Зміст робіт», далі по рядку на урок у порядку
+   КТП. Номерів і дат у файлі немає — НІТ проставляє їх сам за розкладом. */
+const NIT_SHEET="План навчання", NIT_HEADER="Зміст робіт";
+
+let crcTable=null;
+function crc32(u8){
+  if(!crcTable){
+    crcTable=new Uint32Array(256);
+    for(let i=0;i<256;i++){ let c=i; for(let k=0;k<8;k++) c=(c&1)?(0xEDB88320^(c>>>1)):(c>>>1); crcTable[i]=c>>>0; }
+  }
+  let c=0xFFFFFFFF;
+  for(let i=0;i<u8.length;i++) c=crcTable[(c^u8[i])&0xFF]^(c>>>8);
+  return (c^0xFFFFFFFF)>>>0;
+}
+
+/* zip без стиснення (метод 0) — цього досить, xlsx і є zip */
+function zipStore(entries){
+  const te=new TextEncoder();
+  const items=entries.map(e=>({name:te.encode(e.name), data:e.data, crc:crc32(e.data), off:0}));
+  let local=0, central=0;
+  for(const it of items){ local+=30+it.name.length+it.data.length; central+=46+it.name.length; }
+  const out=new Uint8Array(local+central+22), dv=new DataView(out.buffer);
+  let p=0;
+  for(const it of items){
+    it.off=p;
+    dv.setUint32(p,0x04034b50,true); dv.setUint16(p+4,20,true); dv.setUint16(p+6,0x0800,true);
+    dv.setUint16(p+8,0,true); dv.setUint16(p+10,0,true); dv.setUint16(p+12,0,true);
+    dv.setUint32(p+14,it.crc,true); dv.setUint32(p+18,it.data.length,true); dv.setUint32(p+22,it.data.length,true);
+    dv.setUint16(p+26,it.name.length,true); dv.setUint16(p+28,0,true);
+    p+=30; out.set(it.name,p); p+=it.name.length; out.set(it.data,p); p+=it.data.length;
+  }
+  const cdStart=p;
+  for(const it of items){
+    dv.setUint32(p,0x02014b50,true); dv.setUint16(p+4,20,true); dv.setUint16(p+6,20,true);
+    dv.setUint16(p+8,0x0800,true); dv.setUint16(p+10,0,true);
+    dv.setUint16(p+12,0,true); dv.setUint16(p+14,0,true);
+    dv.setUint32(p+16,it.crc,true); dv.setUint32(p+20,it.data.length,true); dv.setUint32(p+24,it.data.length,true);
+    dv.setUint16(p+28,it.name.length,true); dv.setUint16(p+30,0,true); dv.setUint16(p+32,0,true);
+    dv.setUint16(p+34,0,true); dv.setUint16(p+36,0,true); dv.setUint32(p+38,0,true);
+    dv.setUint32(p+42,it.off,true);
+    p+=46; out.set(it.name,p); p+=it.name.length;
+  }
+  dv.setUint32(p,0x06054b50,true); dv.setUint16(p+4,0,true); dv.setUint16(p+6,0,true);
+  dv.setUint16(p+8,items.length,true); dv.setUint16(p+10,items.length,true);
+  dv.setUint32(p+12,p-cdStart,true); dv.setUint32(p+16,cdStart,true); dv.setUint16(p+20,0,true);
+  return out;
+}
+
+/* мінімальний xlsx: один аркуш, один стовпець рядків */
+function xlsxOneColumn(sheetName, header, rows){
+  const NS="http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+  const REL="http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+  const map=new Map(), si=[];
+  const idx=s=>{ if(!map.has(s)){ map.set(s, si.length); si.push(s); } return map.get(s); };
+  const cells=[header].concat(rows).map((s,i)=>({r:i+1, s:idx(s)}));
+  const xml=s=>'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+s;
+
+  const parts=[
+    ["[Content_Types].xml", xml('<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'+
+      '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'+
+      '<Default Extension="xml" ContentType="application/xml"/>'+
+      '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'+
+      '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'+
+      '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'+
+      '<Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>'+
+      '</Types>')],
+    ["_rels/.rels", xml('<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+
+      '<Relationship Id="rId1" Type="'+REL+'/officeDocument" Target="xl/workbook.xml"/></Relationships>')],
+    ["xl/workbook.xml", xml('<workbook xmlns="'+NS+'" xmlns:r="'+REL+'"><sheets>'+
+      '<sheet name="'+esc(sheetName)+'" sheetId="1" r:id="rId1"/></sheets></workbook>')],
+    ["xl/_rels/workbook.xml.rels", xml('<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+
+      '<Relationship Id="rId1" Type="'+REL+'/worksheet" Target="worksheets/sheet1.xml"/>'+
+      '<Relationship Id="rId2" Type="'+REL+'/styles" Target="styles.xml"/>'+
+      '<Relationship Id="rId3" Type="'+REL+'/sharedStrings" Target="sharedStrings.xml"/></Relationships>')],
+    ["xl/styles.xml", xml('<styleSheet xmlns="'+NS+'">'+
+      '<fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>'+
+      '<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>'+
+      '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>'+
+      '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'+
+      '<cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs>'+
+      '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>')],
+    ["xl/sharedStrings.xml", xml('<sst xmlns="'+NS+'" count="'+cells.length+'" uniqueCount="'+si.length+'">'+
+      si.map(s=>'<si><t xml:space="preserve">'+esc(s)+'</t></si>').join("")+'</sst>')],
+    ["xl/worksheets/sheet1.xml", xml('<worksheet xmlns="'+NS+'">'+
+      '<dimension ref="A1:A'+cells.length+'"/><sheetViews><sheetView workbookViewId="0"/></sheetViews>'+
+      '<sheetFormatPr defaultRowHeight="15"/><cols><col min="1" max="1" width="70" customWidth="1"/></cols>'+
+      '<sheetData>'+cells.map(c=>'<row r="'+c.r+'"><c r="A'+c.r+'" t="s"><v>'+c.s+'</v></c></row>').join("")+
+      '</sheetData></worksheet>')]
+  ];
+
+  const te=new TextEncoder();
+  return zipStore(parts.map(p=>({name:p[0], data:te.encode(p[1])})));
+}
+
+function downloadNit(g){
+  const c=CLASSES[g], seg=SEG[segFilter]||SEG.all, nums=ktpNums(g);
+  if(!nums.length) return;
+  const bytes=xlsxOneColumn(NIT_SHEET, NIT_HEADER, nums.map(i=>DATA[g].ktp[i-1].topic));
+  const blob=new Blob([bytes], {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url; a.download="Інформатика-"+c.short+"-клас"+seg.suffix+".xlsx";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 2000);
+  setSync("on", "файл для НІТ: "+c.label+", "+seg.label+", "+nums.length+" "+plural(nums.length,"тема","теми","тем"));
+}
+
 /* ---------------- routing ---------------- */
 function route(){
   const h=(location.hash||"").replace(/^#\/?/,"");
@@ -349,6 +460,33 @@ function viewHome(){
 }
 
 let segFilter="all";
+
+/* Уроки, які зараз показує фільтр. Той самий перелік іде і у файл для НІТ,
+   щоб список на екрані й вміст файлу не могли розійтися. */
+const SEG = {
+  all:{label:"усі уроки", suffix:""},
+  s1:{label:"І семестр", suffix:"-І-семестр"},
+  s2:{label:"ІІ семестр", suffix:"-ІІ-семестр"},
+  todo:{label:"ще не проведено", suffix:"-не-проведено"}
+};
+function ktpNums(g){
+  const out=[];
+  for(let i=1;i<=32;i++){
+    if(segFilter==="s1" && i>=DATA.s2) continue;
+    if(segFilter==="s2" && i<DATA.s2) continue;
+    if(segFilter==="todo" && entry(g,i).done) continue;
+    out.push(i);
+  }
+  return out;
+}
+function plural(n, one, few, many){
+  const a=n%100, b=n%10;
+  if(a>=11 && a<=14) return many;
+  if(b===1) return one;
+  if(b>=2 && b<=4) return few;
+  return many;
+}
+
 function viewKtp(g){
   const c=CLASSES[g], ktp=DATA[g].ktp, plans=DATA[g].plans;
   const parts=['<div class="'+c.cls+'">'];
@@ -359,12 +497,14 @@ function viewKtp(g){
     '<button type="button" class="seg" data-seg="s1" aria-pressed="'+(segFilter==="s1")+'">І семестр · 1–'+(DATA.s2-1)+'</button>'+
     '<button type="button" class="seg" data-seg="s2" aria-pressed="'+(segFilter==="s2")+'">ІІ семестр · '+DATA.s2+'–32</button>'+
     '<button type="button" class="seg" data-seg="todo" aria-pressed="'+(segFilter==="todo")+'">Ще не проведено</button></div>');
+  const nums=ktpNums(g), cnt=nums.length;
+  parts.push('<div class="nitbar"><button type="button" class="nav" data-nit="'+g+'"'+(cnt?"":" disabled")+'>'+
+    'Завантажити файл для НІТ · '+cnt+' '+plural(cnt,"тема","теми","тем")+'</button>'+
+    '<span class="hint">Одним стовпцем «Зміст робіт», у порядку уроків — рівно те, що зараз у фільтрі. '+
+    'У НІТ: план навчання → імпорт із файлу; дати НІТ проставляє сам за розкладом.</span></div>');
   parts.push('<div class="rows">');
-  for(let i=1;i<=32;i++){
+  for(const i of nums){
     const e=entry(g,i), t=ktp[i-1], has=!!plans[String(i)];
-    if(segFilter==="s1" && i>=DATA.s2) continue;
-    if(segFilter==="s2" && i<DATA.s2) continue;
-    if(segFilter==="todo" && e.done) continue;
     parts.push('<button type="button" class="row'+(e.done?" done":"")+(has?" has":"")+'" data-go="/'+g+'/'+i+'">'+
       '<span class="n">'+i+'</span>'+
       '<span class="dt">'+fmtShort(e.date||DATA.dates[i-1])+'</span>'+
@@ -445,6 +585,8 @@ function render(){
 document.addEventListener("click", ev=>{
   const b=ev.target.closest("[data-go]");
   if(b){ go("#"+b.getAttribute("data-go")); return; }
+  const nit=ev.target.closest("[data-nit]");
+  if(nit){ downloadNit(nit.getAttribute("data-nit")); return; }
   const s=ev.target.closest("[data-seg]");
   if(s){ segFilter=s.getAttribute("data-seg"); render(); }
 });
