@@ -203,7 +203,7 @@ footer{margin-top:34px;border-top:1px solid var(--line);padding-top:18px;color:v
   <main id="view"></main>
   <footer>
     <p>КТП 4 класу — за наданим документом (типова освітня програма під керівництвом Р. Б. Шияна, автори Г. В. Ломаковська, Г. О. Проценко). КТП 3 класу складено на основі тієї ж програми й узгоджено з логікою 4 класу.</p>
-    <p>Позначки «проведено», фактичні дати й нотатки зберігаються у цьому браузері. Щоб перенести їх на інший пристрій — «Експортувати журнал», а на новому «Імпортувати».</p>
+    <p>Позначки «проведено», фактичні дати й нотатки зберігаються у цьому браузері. «Експортувати бекап» складає файл з усім станом — журнал плюс копія КТП і конспектів; на іншому пристрої «Імпортувати журнал» переносить із нього позначки.</p>
     <p>Дати — понеділки від 07.09.2026 до 24.05.2027 за структурою навчального року школи: 01.09.2026 — 04.06.2027, канікули осінні 26–30.10.2026, зимові 24.12.2026 — 08.01.2027, весняні 22–26.03.2027, великодні 30.04 — 03.05.2027. І семестр закінчується уроком 15 (21.12.2026), ІІ починається уроком 16 (11.01.2027). 08.03.2027 виключено як святковий день; 31.05.2027 лишається запасним понеділком на перенесення.</p>
   </footer>
 </div>
@@ -245,13 +245,19 @@ function setSync(cls, txt){
   document.getElementById("syncTxt").textContent=txt;
 }
 
-/* ---- перенесення журналу між пристроями ---- */
+/* ---- бекап і перенесення між пристроями ----
+   У файл іде весь поточний стан: журнал (проведено, фактична дата, нотатка —
+   зокрема й по уроках, які ще не проведені) плюс знімок DATA, тобто КТП обох
+   класів, конспекти, розраховані дати й межа семестрів. Імпорт бере з файлу
+   лише журнал: контент там лежить як архів на випадок, коли зникне
+   репозиторій, а не для того, щоб підмінити зібраний сайт старими темами. */
 function exportLog(){
-  const blob=new Blob([JSON.stringify({v:1, exported:new Date().toISOString(), g3:state.g3, g4:state.g4}, null, 1)],
+  const blob=new Blob([JSON.stringify({v:2, exported:new Date().toISOString(),
+                                       g3:state.g3, g4:state.g4, data:DATA}, null, 1)],
                       {type:"application/json"});
   const url=URL.createObjectURL(blob);
   const a=document.createElement("a");
-  a.href=url; a.download="zhurnal-informatyka-"+new Date().toISOString().slice(0,10)+".json";
+  a.href=url; a.download="bekap-informatyka-"+new Date().toISOString().slice(0,10)+".json";
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(()=>URL.revokeObjectURL(url), 2000);
 }
@@ -441,7 +447,7 @@ function viewHome(){
       '<span class="stat">проведено '+d+' з 32</span></button>');
   }
   parts.push('</div>');
-  parts.push('<div class="tools"><button type="button" class="nav" id="expBtn">Експортувати журнал</button>'+
+  parts.push('<div class="tools"><button type="button" class="nav" id="expBtn">Експортувати бекап</button>'+
     '<button type="button" class="nav" id="impBtn">Імпортувати журнал</button>'+
     '<input type="file" id="impFile" accept="application/json,.json" hidden></div>');
   parts.push('</div>');
