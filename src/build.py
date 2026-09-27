@@ -4,6 +4,7 @@
     python3 src/build.py
 
 Один самодостатній HTML-файл на виході — саме його роздає GitHub Pages.
+Схема «Windows на проєктор» лежить окремо в src/win/ і вшивається сюди ж.
 """
 import json, re, pathlib
 from datetime import date, timedelta
@@ -88,6 +89,14 @@ def main():
             "g4": {"ktp": k4, "plans": {str(p["n"]): p for p in p4}}}
 
     body = (SRC / "shell.html").read_text(encoding="utf-8")
+    # схема «Windows на проєктор» — окремими файлами, бо вона завбільшки з решту сайту
+    win = SRC / "win"
+    for mark in ("/*__WIN_CSS__*/", "/*__WIN_JS__*/"):
+        if mark not in body:
+            raise SystemExit("src/shell.html: не знайдено плейсхолдер " + mark)
+    body = body.replace("/*__WIN_CSS__*/", (win / "win.css").read_text(encoding="utf-8").rstrip())
+    body = body.replace("/*__WIN_JS__*/", "\n\n".join(
+        f.read_text(encoding="utf-8").rstrip() for f in sorted(win.glob("*.js"))))
     if "__DATA__" not in body:
         raise SystemExit("src/shell.html: не знайдено плейсхолдер __DATA__")
     body = body.replace("__DATA__", json.dumps(data, ensure_ascii=False, separators=(",", ":")))
